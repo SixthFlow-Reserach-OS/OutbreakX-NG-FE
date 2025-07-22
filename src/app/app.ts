@@ -6,7 +6,12 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
-import { MatDialog, MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
+import {
+  MatDialog,
+  MatDialogRef,
+  MAT_DIALOG_DATA,
+  MatDialogModule,
+} from '@angular/material/dialog';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { FormsModule } from '@angular/forms';
@@ -20,6 +25,8 @@ import { MapComponent } from './map/map';
 import { ProjectService, MapProject } from './services/project.service';
 import { AuthService } from './services/auth.service';
 import { Observable } from 'rxjs';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 /**
  * Dialog component for creating or renaming projects.
@@ -32,12 +39,17 @@ import { Observable } from 'rxjs';
     <div mat-dialog-content>
       <mat-form-field appearance="outline">
         <mat-label>Project Name</mat-label>
-        <input matInput [(ngModel)]="projectName" cdkFocusInitial>
+        <input matInput [(ngModel)]="projectName" cdkFocusInitial />
       </mat-form-field>
     </div>
     <div mat-dialog-actions class="dialog-actions">
       <button mat-button (click)="onCancel()">Cancel</button>
-      <button mat-flat-button color="primary" [mat-dialog-close]="projectName" [disabled]="!projectName">
+      <button
+        mat-flat-button
+        color="primary"
+        [mat-dialog-close]="projectName"
+        [disabled]="!projectName"
+      >
         {{ data.actionButtonText }}
       </button>
     </div>
@@ -49,15 +61,20 @@ import { Observable } from 'rxjs';
     MatButtonModule,
     MatInputModule,
     MatFormFieldModule,
-    FormsModule
-  ]
+    FormsModule,
+  ],
 })
 export class ProjectDialogComponent {
   projectName: string = '';
 
   constructor(
     public dialogRef: MatDialogRef<ProjectDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { title: string, actionButtonText: string, currentName?: string }
+    @Inject(MAT_DIALOG_DATA)
+    public data: {
+      title: string;
+      actionButtonText: string;
+      currentName?: string;
+    }
   ) {
     this.projectName = this.data.currentName || '';
   }
@@ -90,9 +107,11 @@ export class ProjectDialogComponent {
     MatTooltipModule,
     MatMenuModule,
     MatDividerModule,
+    MatProgressSpinnerModule,
+    MatSnackBarModule,
   ],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
 export class AppComponent implements OnInit {
   title = 'OutbreakX Map System';
@@ -116,26 +135,43 @@ export class AppComponent implements OnInit {
   private _sidenavOpened = true;
 
   constructor(
-    private projectService: ProjectService,
+    public projectService: ProjectService,
     public authService: AuthService,
-    public dialog: MatDialog
+    public dialog: MatDialog,
+    private snackBar: MatSnackBar
   ) {
     this.projects$ = this.projectService.projects$;
     this.activeProject$ = this.projectService.activeProject$;
   }
 
   ngOnInit(): void {
-    // Only initialize projects when user is authenticated
-    this.authService.currentUser$.subscribe(user => {
+    // Projects are automatically loaded when user is authenticated via ProjectService
+    // Auto-create first project if user has no projects
+    this.authService.currentUser$.subscribe((user) => {
       if (user) {
         // User is authenticated, initialize projects
-        this.projects$.subscribe(projects => {
+        this.projects$.subscribe((projects) => {
           if (projects.length === 0) {
-            this.projectService.createProject('My First Project');
+            this.createFirstProject();
           }
         });
       }
     });
+  }
+
+  /**
+   * Creates the first project for new users
+   */
+  private async createFirstProject(): Promise<void> {
+    try {
+      await this.projectService.createProject('My First Project');
+    } catch (error) {
+      console.error('Error creating first project:', error);
+      this.snackBar.open('Error creating first project', 'Dismiss', {
+        duration: 3000,
+        panelClass: ['error-snackbar'],
+      });
+    }
   }
 
   /**
@@ -146,6 +182,10 @@ export class AppComponent implements OnInit {
       await this.authService.signOut();
     } catch (error) {
       console.error('Error signing out:', error);
+      this.snackBar.open('Error signing out', 'Dismiss', {
+        duration: 3000,
+        panelClass: ['error-snackbar'],
+      });
     }
   }
 
@@ -155,12 +195,24 @@ export class AppComponent implements OnInit {
   openCreateProjectDialog(): void {
     const dialogRef = this.dialog.open(ProjectDialogComponent, {
       width: '300px',
-      data: { title: 'Create New Project', actionButtonText: 'Create' }
+      data: { title: 'Create New Project', actionButtonText: 'Create' },
     });
 
-    dialogRef.afterClosed().subscribe(result => {
+    dialogRef.afterClosed().subscribe(async (result) => {
       if (result) {
-        this.projectService.createProject(result);
+        try {
+          await this.projectService.createProject(result);
+          this.snackBar.open('Project created successfully!', 'Dismiss', {
+            duration: 2000,
+            panelClass: ['success-snackbar'],
+          });
+        } catch (error) {
+          console.error('Error creating project:', error);
+          this.snackBar.open('Error creating project', 'Dismiss', {
+            duration: 3000,
+            panelClass: ['error-snackbar'],
+          });
+        }
       }
     });
   }
@@ -182,12 +234,28 @@ export class AppComponent implements OnInit {
     event.stopPropagation(); // Prevent selecting the project when clicking rename
     const dialogRef = this.dialog.open(ProjectDialogComponent, {
       width: '300px',
-      data: { title: 'Rename Project', actionButtonText: 'Rename', currentName: project.name }
+      data: {
+        title: 'Rename Project',
+        actionButtonText: 'Rename',
+        currentName: project.name,
+      },
     });
 
-    dialogRef.afterClosed().subscribe(result => {
+    dialogRef.afterClosed().subscribe(async (result) => {
       if (result && result !== project.name) {
-        this.projectService.renameProject(project.id, result);
+        try {
+          await this.projectService.renameProject(project.id, result);
+          this.snackBar.open('Project renamed successfully!', 'Dismiss', {
+            duration: 2000,
+            panelClass: ['success-snackbar'],
+          });
+        } catch (error) {
+          console.error('Error renaming project:', error);
+          this.snackBar.open('Error renaming project', 'Dismiss', {
+            duration: 3000,
+            panelClass: ['error-snackbar'],
+          });
+        }
       }
     });
   }
@@ -197,10 +265,26 @@ export class AppComponent implements OnInit {
    * @param projectId The ID of the project to delete.
    * @param event The click event to stop propagation.
    */
-  deleteProject(projectId: string, event: Event): void {
+  async deleteProject(projectId: string, event: Event): Promise<void> {
     event.stopPropagation(); // Prevent selecting the project when clicking delete
-    if (confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-      this.projectService.deleteProject(projectId);
+    if (
+      confirm(
+        'Are you sure you want to delete this project? This action cannot be undone.'
+      )
+    ) {
+      try {
+        await this.projectService.deleteProject(projectId);
+        this.snackBar.open('Project deleted successfully!', 'Dismiss', {
+          duration: 2000,
+          panelClass: ['success-snackbar'],
+        });
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        this.snackBar.open('Error deleting project', 'Dismiss', {
+          duration: 3000,
+          panelClass: ['error-snackbar'],
+        });
+      }
     }
   }
 }

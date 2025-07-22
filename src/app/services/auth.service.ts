@@ -1,8 +1,21 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
-import { Auth, GoogleAuthProvider, signInWithPopup, signOut, authState, User } from '@angular/fire/auth';
-import { Firestore, doc, setDoc, getDoc, serverTimestamp } from '@angular/fire/firestore';
+import {
+  Auth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  authState,
+  User,
+} from '@angular/fire/auth';
+import {
+  Firestore,
+  doc,
+  setDoc,
+  getDoc,
+  serverTimestamp,
+} from '@angular/fire/firestore';
 import { Router } from '@angular/router';
-import { Observable, from, switchMap, of, catchError, EMPTY } from 'rxjs';
+import { Observable, from, switchMap, of, catchError } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 
 export interface UserProfile {
@@ -15,7 +28,7 @@ export interface UserProfile {
 }
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class AuthService {
   private auth = inject(Auth);
@@ -28,32 +41,37 @@ export class AuthService {
   private _authError = signal<string | null>(null);
 
   // Convert Firebase auth state to signal
-  private authUser = toSignal(authState(this.auth), { initialValue: undefined });
+  private authUser = toSignal(authState(this.auth), {
+    initialValue: undefined,
+  });
 
   // Computed signals for reactive state
   public readonly isLoading = this._isLoading.asReadonly();
   public readonly userProfile = this._userProfile.asReadonly();
   public readonly authError = this._authError.asReadonly();
-  public readonly isAuthenticated = computed(() => this.authUser() !== null && this.authUser() !== undefined);
+  public readonly isAuthenticated = computed(
+    () => this.authUser() !== null && this.authUser() !== undefined
+  );
   public readonly currentUser = computed(() => this.authUser());
 
   // Observable versions for compatibility
   public readonly currentUser$: Observable<User | null> = authState(this.auth);
-  public readonly userProfile$: Observable<UserProfile | null> = this.currentUser$.pipe(
-    switchMap(user => {
-      if (user) {
-        return this.loadUserProfileObservable(user);
-      } else {
-        this._userProfile.set(null);
+  public readonly userProfile$: Observable<UserProfile | null> =
+    this.currentUser$.pipe(
+      switchMap((user) => {
+        if (user) {
+          return this.loadUserProfileObservable(user);
+        } else {
+          this._userProfile.set(null);
+          return of(null);
+        }
+      }),
+      catchError((error) => {
+        console.error('Error in userProfile$ stream:', error);
+        this._authError.set(error.message);
         return of(null);
-      }
-    }),
-    catchError(error => {
-      console.error('Error in userProfile$ stream:', error);
-      this._authError.set(error.message);
-      return of(null);
-    })
-  );
+      })
+    );
 
   constructor() {
     // Initialize auth state monitoring
@@ -95,7 +113,7 @@ export class AuthService {
 
       // Configure provider for better UX
       provider.setCustomParameters({
-        prompt: 'select_account'
+        prompt: 'select_account',
       });
 
       const result = await signInWithPopup(this.auth, provider);
@@ -148,14 +166,14 @@ export class AuthService {
         displayName: user.displayName || '',
         photoURL: user.photoURL || undefined,
         createdAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp()
+        lastLoginAt: serverTimestamp(),
       };
 
       await setDoc(userRef, userProfile);
       this._userProfile.set({
         ...userProfile,
         createdAt: new Date(),
-        lastLoginAt: new Date()
+        lastLoginAt: new Date(),
       });
     } else {
       // Update existing user profile
@@ -164,14 +182,14 @@ export class AuthService {
         email: user.email || existingProfile.email,
         displayName: user.displayName || existingProfile.displayName,
         photoURL: user.photoURL || existingProfile.photoURL,
-        lastLoginAt: serverTimestamp()
+        lastLoginAt: serverTimestamp(),
       };
 
       await setDoc(userRef, updatedProfile, { merge: true });
       this._userProfile.set({
         ...existingProfile,
         ...updatedProfile,
-        lastLoginAt: new Date()
+        lastLoginAt: new Date(),
       });
     }
   }
@@ -190,7 +208,7 @@ export class AuthService {
         const profileWithDates = {
           ...profile,
           createdAt: profile.createdAt?.toDate?.() || new Date(),
-          lastLoginAt: profile.lastLoginAt?.toDate?.() || new Date()
+          lastLoginAt: profile.lastLoginAt?.toDate?.() || new Date(),
         };
         this._userProfile.set(profileWithDates);
       } else {
@@ -207,10 +225,12 @@ export class AuthService {
   /**
    * Load user profile from Firestore (observable version for compatibility)
    */
-  private loadUserProfileObservable(user: User): Observable<UserProfile | null> {
+  private loadUserProfileObservable(
+    user: User
+  ): Observable<UserProfile | null> {
     return from(this.loadUserProfile(user)).pipe(
       switchMap(() => of(this._userProfile())),
-      catchError(error => {
+      catchError((error) => {
         console.error('Error loading user profile:', error);
         return of(null);
       })

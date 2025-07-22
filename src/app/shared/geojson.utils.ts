@@ -20,8 +20,8 @@ export function layerToGeoJSON(layer: L.Layer): GeoJSON.Feature | null {
       },
       geometry: {
         type: 'Point',
-        coordinates: [latlng.lng, latlng.lat]
-      }
+        coordinates: [latlng.lng, latlng.lat],
+      },
     };
   } else if (layer instanceof L.Circle) {
     const center = layer.getLatLng();
@@ -31,12 +31,12 @@ export function layerToGeoJSON(layer: L.Layer): GeoJSON.Feature | null {
       properties: {
         type: 'circle',
         radius: radius,
-        style: layer.options // Preserve style options like color, fillColor, etc.
+        style: layer.options, // Preserve style options like color, fillColor, etc.
       },
       geometry: {
         type: 'Point', // GeoJSON circle is represented as a point with a radius property
-        coordinates: [center.lng, center.lat]
-      }
+        coordinates: [center.lng, center.lat],
+      },
     };
   } else if (layer instanceof L.Polyline) {
     const latlngs = layer.getLatLngs() as L.LatLng[];
@@ -44,28 +44,28 @@ export function layerToGeoJSON(layer: L.Layer): GeoJSON.Feature | null {
       type: 'Feature',
       properties: {
         type: 'polyline',
-        style: layer.options // Preserve style options
+        style: layer.options, // Preserve style options
       },
       geometry: {
         type: 'LineString',
-        coordinates: latlngs.map(latlng => [latlng.lng, latlng.lat])
-      }
+        coordinates: latlngs.map((latlng) => [latlng.lng, latlng.lat]),
+      },
     };
   } else if (layer instanceof L.Polygon) {
     const latlngs = layer.getLatLngs() as L.LatLng[][]; // Can be multiple rings
-    const coordinates = latlngs.map(ring =>
-      ring.map(latlng => [latlng.lng, latlng.lat])
+    const coordinates = latlngs.map((ring) =>
+      ring.map((latlng) => [latlng.lng, latlng.lat])
     );
     return {
       type: 'Feature',
       properties: {
         type: 'polygon',
-        style: layer.options // Preserve style options
+        style: layer.options, // Preserve style options
       },
       geometry: {
         type: 'Polygon',
-        coordinates: coordinates
-      }
+        coordinates: coordinates,
+      },
     };
   }
   return null;
@@ -92,10 +92,12 @@ export function geoJSONToLayer(feature: GeoJSON.Feature): L.Layer | null {
       if (properties['type'] === 'marker') {
         const iconOptions = {
           // Use the stored iconUrl or a default SVG data URL
-          iconUrl: properties['iconUrl'] || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FEB101"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>',
+          iconUrl:
+            properties['iconUrl'] ||
+            'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FEB101"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>',
           iconSize: properties['iconSize'] || [25, 41],
           iconAnchor: properties['iconAnchor'] || [12, 41],
-          className: properties['iconUrl'] ? '' : 'custom-marker-icon' // Apply custom class only if using default SVG
+          className: properties['iconUrl'] ? '' : 'custom-marker-icon', // Apply custom class only if using default SVG
         };
         return L.marker(latlng, { icon: L.icon(iconOptions) });
       } else if (properties['type'] === 'circle' && properties['radius']) {
@@ -104,15 +106,78 @@ export function geoJSONToLayer(feature: GeoJSON.Feature): L.Layer | null {
       return L.marker(latlng); // Default marker if type is not specified
     case 'LineString':
       const lineCoords = (feature.geometry as GeoJSON.LineString).coordinates;
-      const lineLatLngs = lineCoords.map(c => L.latLng(c[1], c[0]));
+      const lineLatLngs = lineCoords.map((c) => L.latLng(c[1], c[0]));
       return L.polyline(lineLatLngs, style);
     case 'Polygon':
       const polyCoords = (feature.geometry as GeoJSON.Polygon).coordinates;
-      const polyLatLngs = polyCoords.map(ring =>
-        ring.map(c => L.latLng(c[1], c[0]))
+      const polyLatLngs = polyCoords.map((ring) =>
+        ring.map((c) => L.latLng(c[1], c[0]))
       );
       return L.polygon(polyLatLngs, style);
     default:
       return null;
   }
+}
+
+/**
+ * Prepares GeoJSON for Firestore storage by converting it to a string.
+ * Firestore doesn't support nested arrays, so we serialize the GeoJSON.
+ * @param geojson The GeoJSON FeatureCollection to prepare for storage.
+ * @returns A string representation of the GeoJSON.
+ */
+export function prepareGeoJSONForFirestore(
+  geojson: GeoJSON.FeatureCollection
+): string {
+  return JSON.stringify(geojson);
+}
+
+/**
+ * Restores GeoJSON from Firestore storage by parsing the string.
+ * @param geojsonString The string representation of the GeoJSON from Firestore.
+ * @returns A GeoJSON FeatureCollection object.
+ */
+export function restoreGeoJSONFromFirestore(
+  geojsonString: string | GeoJSON.FeatureCollection
+): GeoJSON.FeatureCollection {
+  // Handle null or undefined
+  if (!geojsonString) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+
+  // If it's already a proper GeoJSON object (backward compatibility)
+  if (
+    typeof geojsonString === 'object' &&
+    geojsonString.type === 'FeatureCollection'
+  ) {
+    return geojsonString;
+  }
+
+  // If it's a string, try to parse it
+  if (typeof geojsonString === 'string') {
+    try {
+      const parsed = JSON.parse(geojsonString);
+      // Validate that it's a proper GeoJSON FeatureCollection
+      if (
+        parsed &&
+        parsed.type === 'FeatureCollection' &&
+        Array.isArray(parsed.features)
+      ) {
+        return parsed;
+      } else {
+        console.warn('Invalid GeoJSON structure found:', parsed);
+        return { type: 'FeatureCollection', features: [] };
+      }
+    } catch (error) {
+      console.error('Error parsing GeoJSON from Firestore:', error);
+      return { type: 'FeatureCollection', features: [] };
+    }
+  }
+
+  // Fallback for any unexpected data type
+  console.warn(
+    'Unexpected GeoJSON data type:',
+    typeof geojsonString,
+    geojsonString
+  );
+  return { type: 'FeatureCollection', features: [] };
 }

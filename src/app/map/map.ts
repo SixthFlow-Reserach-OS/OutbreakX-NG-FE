@@ -9,13 +9,18 @@ import * as L from 'leaflet';
 import 'leaflet-draw';
 import 'leaflet-routing-machine';
 import { ProjectService } from '../services/project.service';
-import { geoJSONToLayer, layerToGeoJSON } from '../shared/geojson.utils';
+import {
+  geoJSONToLayer,
+  layerToGeoJSON,
+  restoreGeoJSONFromFirestore,
+} from '../shared/geojson.utils';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 @Component({
   selector: 'app-map',
@@ -172,13 +177,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
    */
   private subscribeToActiveProject(): void {
     this.activeProjectSubscription =
-      this.projectService.activeProject$.subscribe((project) => {
+      this.projectService.activeProjectGeoJSON$.subscribe((geojson) => {
         this.clearMapLayers(); // Clear existing features from the map
-        if (project) {
+        if (geojson && geojson.features && geojson.features.length > 0) {
           // Deep copy the GeoJSON to avoid direct mutation issues
-          this.currentProjectGeoJSON = JSON.parse(
-            JSON.stringify(project.geojson)
-          );
+          this.currentProjectGeoJSON = JSON.parse(JSON.stringify(geojson));
           this.loadGeoJSONToMap(this.currentProjectGeoJSON); // Load features of the new active project
 
           // Fit map bounds to the drawn items, or default bounds if no items
@@ -215,7 +218,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     if (!geojson || !geojson.features) {
       return;
     }
-    geojson.features.forEach((feature) => {
+    geojson.features.forEach((feature, index) => {
       const layer = geoJSONToLayer(feature); // Convert GeoJSON feature to Leaflet layer
       if (layer) {
         this.drawnItems.addLayer(layer); // Add layer to the drawn items group
@@ -414,26 +417,31 @@ export class MapComponent implements AfterViewInit, OnDestroy {
    * Exports the current project's GeoJSON data as a downloadable file.
    */
   exportGeoJSON(): void {
-    this.projectService.activeProject$.subscribe((activeProject) => {
-      if (activeProject && activeProject.geojson) {
-        const geojsonString = JSON.stringify(activeProject.geojson, null, 2); // Pretty print GeoJSON
-        const blob = new Blob([geojsonString], { type: 'application/json' }); // Create a Blob from the string
-        const url = URL.createObjectURL(blob); // Create a URL for the Blob
-        const a = document.createElement('a'); // Create a temporary anchor element
-        a.href = url;
-        a.download = `${activeProject.name || 'map_project'}.geojson`; // Set download filename
-        document.body.appendChild(a); // Append to body (required for Firefox)
-        a.click(); // Programmatically click the anchor to trigger download
-        document.body.removeChild(a); // Remove the temporary anchor
-        URL.revokeObjectURL(url); // Release the object URL
-        this.snackBar.open('GeoJSON exported!', 'Dismiss', { duration: 2000 });
-      } else {
-        this.snackBar.open(
-          'No active project or no data to export.',
-          'Dismiss',
-          { duration: 3000 }
-        );
-      }
-    });
+    this.projectService.activeProjectGeoJSON$
+      .pipe(take(1))
+      .subscribe((geojson) => {
+        if (geojson && geojson.features && geojson.features.length > 0) {
+          const geojsonString = JSON.stringify(geojson, null, 2); // Pretty print GeoJSON
+          const blob = new Blob([geojsonString], { type: 'application/json' }); // Create a Blob from the string
+          const url = URL.createObjectURL(blob); // Create a URL for the Blob
+          const a = document.createElement('a'); // Create a temporary anchor element
+          a.href = url;
+          const activeProject = this.projectService.getActiveProjectData();
+          a.download = `${activeProject?.name || 'map_project'}.geojson`; // Set download filename
+          document.body.appendChild(a); // Append to body (required for Firefox)
+          a.click(); // Programmatically click the anchor to trigger download
+          document.body.removeChild(a); // Remove the temporary anchor
+          URL.revokeObjectURL(url); // Release the object URL
+          this.snackBar.open('GeoJSON exported!', 'Dismiss', {
+            duration: 2000,
+          });
+        } else {
+          this.snackBar.open(
+            'No active project or no data to export.',
+            'Dismiss',
+            { duration: 3000 }
+          );
+        }
+      });
   }
 }
