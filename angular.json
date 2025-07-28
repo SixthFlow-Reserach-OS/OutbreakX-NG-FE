@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "OutbreakX-NG-FE": {
+    "SixthflowGIS": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -58,10 +58,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "OutbreakX-NG-FE:build:production"
+              "buildTarget": "SixthflowGIS:build:production"
             },
             "development": {
-              "buildTarget": "OutbreakX-NG-FE:build:development"
+              "buildTarget": "SixthflowGIS:build:development"
             }
           },
           "defaultConfiguration": "development"

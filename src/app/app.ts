@@ -114,7 +114,7 @@ export class ProjectDialogComponent {
   styleUrl: './app.scss',
 })
 export class AppComponent implements OnInit {
-  title = 'OutbreakX Map System';
+  title = 'SixthflowGIS Map System';
   projects$: Observable<MapProject[]>;
   activeProject$: Observable<MapProject | null>;
 
