@@ -1,18 +1,15 @@
 import { Routes } from '@angular/router';
-
-import { MapComponent } from './map/map';
-import { LoginComponent } from './login/login';
 import { authGuard, loginGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   { 
     path: 'login', 
-    component: LoginComponent,
+    loadComponent: () => import('./login/login').then(m => m.LoginComponent),
     canActivate: [loginGuard]
   },
   { 
     path: 'map',
-    component: MapComponent,
+    loadComponent: () => import('./map/map').then(m => m.MapComponent),
     canActivate: [authGuard]
   },
   { 
